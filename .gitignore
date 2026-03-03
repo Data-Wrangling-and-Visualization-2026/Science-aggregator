@@ -224,3 +224,6 @@ venv/
 
 #Data base
 *.sql
+
+# Jupyter
+*.ipynb_checkpoints
