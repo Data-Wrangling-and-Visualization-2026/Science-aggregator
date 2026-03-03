@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Acctual Data
+data/raw/*.json
+data/processed/*.parquet
+data/*.db
+
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.ipynb_checkpoints
+
+#Data base
+*.sql
