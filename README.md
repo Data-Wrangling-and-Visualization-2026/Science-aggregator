@@ -26,7 +26,10 @@ cd Science-aggregator
 cp .env.example .env
 ```
 
-The default values in `.env` work out of the box — no changes needed.
+Open `.env` and replace `your_user` and `your_password` with any values, for example:
+
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
 
 ### 3. Start the database
 
