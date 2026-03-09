@@ -26,10 +26,13 @@ cd Science-aggregator
 cp .env.example .env
 ```
 
-Open `.env` and replace `your_user` and `your_password` with any values:
-```env
+Open `.env` and set your values:
+```
+POSTGRES_DB=science
 POSTGRES_USER=user
 POSTGRES_PASSWORD=password
+DATABASE_URL_LOCAL=postgresql://user:password@localhost:5432/science
+DATABASE_URL=postgresql://user:password@db:5432/science
 ```
 
 ### 3. Start the database
