@@ -16,7 +16,7 @@ A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](h
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Data-Wrangling-and-Visualisation-2026/Science-aggregator.git
+git clone "https://github.com/Data-Wrangling-and-Visualisation-2026/Science-aggregator"
 cd Science-aggregator
 ```
 
