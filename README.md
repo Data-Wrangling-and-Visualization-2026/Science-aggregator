@@ -26,10 +26,11 @@ cd Science-aggregator
 cp .env.example .env
 ```
 
-Open `.env` and replace `your_user` and `your_password` with any values, for example:
-
-POSTGRES_USER=user 
+Open `.env` and replace `your_user` and `your_password` with any values:
+```env
+POSTGRES_USER=user
 POSTGRES_PASSWORD=password
+```
 
 ### 3. Start the database
 
