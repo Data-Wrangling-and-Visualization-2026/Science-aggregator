@@ -147,4 +147,3 @@ Final dataset: **104,466 records, 34 columns**
 - **Marat Akhmetov** — data pipeline, backend API
 - **Ekaterina Baeva** — frontend dashboard
 
-Course: Data Wrangling & Visualization 2026 · Instructor: Rustam Lukmanov
