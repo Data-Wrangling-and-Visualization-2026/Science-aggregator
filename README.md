@@ -10,7 +10,6 @@ A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](h
 
 ### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- [Node.js](https://nodejs.org/) v18+
 - Python 3.10+
 
 ### 1. Clone the repository
@@ -27,6 +26,7 @@ cp .env.example .env
 ```
 
 Open `.env` and set your values:
+
 ```
 POSTGRES_DB=science
 POSTGRES_USER=user
@@ -35,49 +35,42 @@ DATABASE_URL_LOCAL=postgresql://user:password@localhost:5432/science
 DATABASE_URL=postgresql://user:password@db:5432/science
 ```
 
-### 3. Start the database
-
-```bash
-docker compose up -d db
-```
-
-### 4. Download the processed dataset
+### 3. Download the processed dataset
 
 Download the file and place it at `data/processed/clean_all_years.parquet`:
 
 > 📦 **[Download clean_all_years.parquet](https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/view?usp=sharing)** (~180 MB)
 
-Then seed the database (takes ~2 min):
+### 4. Seed the database
 
 ```bash
 pip install pandas pyarrow sqlalchemy psycopg2-binary python-dotenv
+docker compose up -d db
 python backend/seed_db.py
 ```
 
-### 5. Start the backend
+This loads 104,466 records into PostgreSQL (~2 min).
+
+### 5. Start all services
 
 ```bash
-pip install fastapi uvicorn sqlalchemy psycopg2-binary python-dotenv
-uvicorn backend.main:app --reload
+docker compose up -d
 ```
 
-Backend runs at **http://localhost:8000**
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
 
-Verify:
+### 6. Verify the backend
+
 ```bash
 curl http://localhost:8000/health
 # → {"status": "ok"}
+
+curl http://localhost:8000/api/stats
+# → {"total_projects": 104466, ...}
 ```
-
-### 6. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend runs at **http://localhost:5173**
 
 ---
 
@@ -154,4 +147,4 @@ Final dataset: **104,466 records, 34 columns**
 - **Marat Akhmetov** — data pipeline, backend API
 - **Ekaterina Baeva** — frontend dashboard
 
-
+Course: Data Wrangling & Visualization 2026 · Instructor: Rustam Lukmanov
