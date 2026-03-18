@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATABASE_URL = os.getenv("DATABASE_URL_LOCAL") or os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/science")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_URL_LOCAL", "postgresql://user:password@localhost:5432/science")
 engine = create_engine(DATABASE_URL)
 
 
