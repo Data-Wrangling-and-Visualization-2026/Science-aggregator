@@ -1,5 +1,4 @@
 services:
-
   db:
     image: postgres:16
     container_name: science_db
@@ -18,9 +17,9 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  backend:
     build: ./backend
-    container_name: science_api
+    container_name: science_backend
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -29,11 +28,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    container_name: science_frontend
+    working_dir: /app
     volumes:
-      - ./data/processed:/app/data/processed
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
-
-
-  
