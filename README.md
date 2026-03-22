@@ -10,7 +10,6 @@ A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](h
 
 ### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Python 3.10+
 
 ### 1. Clone the repository
 
@@ -37,32 +36,28 @@ DATABASE_URL=postgresql://user:password@db:5432/science
 
 ### 3. Download the processed dataset
 
-Download the file and place it at `data/processed/clean_all_years.parquet`:
+Download and place at `data/processed/clean_all_years.parquet`:
 
 > 📦 **[Download clean_all_years.parquet](https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/view?usp=sharing)** (~180 MB)
 
-### 4. Seed the database
-
-```bash
-pip install pandas pyarrow sqlalchemy psycopg2-binary python-dotenv
-docker compose up -d db
-python backend/seed_db.py
-```
-
-This loads 104,466 records into PostgreSQL (~2 min).
-
-### 5. Start all services
+### 4. Start everything
 
 ```bash
 docker compose up -d
 ```
+
+This will:
+- Start PostgreSQL database
+- Seed the database with 104,466 records (~3-5 min on first run)
+- Start the backend API
+- Start the frontend
 
 | Service | URL |
 |---------|-----|
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:8000 |
 
-### 6. Verify the backend
+### 5. Verify
 
 ```bash
 curl http://localhost:8000/health
@@ -146,4 +141,3 @@ Final dataset: **104,466 records, 34 columns**
 
 - **Marat Akhmetov** — data pipeline, backend API
 - **Ekaterina Baeva** — frontend dashboard
-

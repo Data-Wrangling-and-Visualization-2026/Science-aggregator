@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 5
 
+  seeder:
+    build: ./backend
+    container_name: science_seeder
+    environment:
+      DATABASE_URL_LOCAL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    command: python seed_db.py
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build: ./backend
     container_name: science_backend
