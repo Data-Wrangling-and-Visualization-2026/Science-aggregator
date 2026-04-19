@@ -194,4 +194,3 @@ Science-aggregator/
 - **Marat Akhmetov** — data pipeline, backend API, pgvector, Docker infrastructure
 - **Ekaterina Baeva** — frontend, visualizations
 
-**Course:** Data Wrangling & Visualization 2026 · Prof. Rustam Lukmanov
