@@ -3,6 +3,10 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, PieChart, Pie
 } from "recharts";
+import GraphPanel from "./GraphPanel.jsx";
+import RegionMap from "./RegionMap.jsx";
+import AgentPanel from "./AgentPanel.jsx";
+import TrendsPanel from "./TrendsPanel.jsx";
 
 const API = "http://localhost:8000";
 const COLORS = ["#4f8ef7","#6ee7b7","#f59e42","#f472b6","#a78bfa","#34d399","#fb923c","#60a5fa"];
@@ -25,13 +29,14 @@ function fmtBudget(thousands) {
 
 function shortName(name = "", len = 52) {
   const clean = name
-    .replace(/ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ (БЮДЖЕТНОЕ|АВТОНОМНОЕ) ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ/gi, "")
-    .replace(/["'«»]/g, "").trim();
+    .replace(/федеральное\s+государственное\s+(бюджетное|автономное|казённое|казенное)?\s*(образовательное\s+)?учреждение\s+(высшего\s+(профессионального\s+)?образования\s+)?/gi, "")
+    .replace(/государственное\s+(бюджетное|автономное|казённое|казенное)\s*(образовательное\s+)?учреждение\s*(науки\s+)?/gi, "")
+    .replace(/(?:фгбоу|фгаоу|фгку|фгуп|фгбун|фгбну)\s+(?:во|дпо|нпо|впо)?\s*/gi, "")
+    .replace(/["'«»]/g, "").replace(/\s+/g, " ").trim();
   return clean.length > len ? clean.slice(0, len) + "…" : clean;
 }
 
 function gisLink(regNum) {
-  // Direct link to the project page on rosrid.ru (the official NIOKTR registry)
   return `https://www.rosrid.ru/nioktr/search?number=${encodeURIComponent(regNum)}`;
 }
 
@@ -51,8 +56,81 @@ function Tags({ keywords, max = 5 }) {
   );
 }
 
+// ── Inline RAG agent inside modal ─────────────────────────
+function ModalAgent({ project }) {
+  const [query,  setQuery]  = useState("");
+  const [answer, setAnswer] = useState("");
+  const [sources,setSources]= useState([]);
+  const [status, setStatus] = useState("idle");
+  const [error,  setError]  = useState("");
+
+  useEffect(() => {
+    if (!project) return;
+    setAnswer(""); setSources([]); setError(""); setStatus("idle");
+    setQuery(`Расскажи подробнее об этом проекте: "${(project.name||"").slice(0,80)}". Каковы цели исследования и ожидаемые результаты?`);
+  }, [project]);
+
+  const run = async () => {
+    if (!query.trim()) return;
+    setStatus("loading"); setError(""); setAnswer(""); setSources([]);
+    try {
+      const r = await fetch(`${API}/api/agent?q=${encodeURIComponent(query)}`);
+      if (!r.ok) throw new Error(((await r.json().catch(()=>({}))).detail) || `HTTP ${r.status}`);
+      const d = await r.json();
+      setAnswer(d.answer||""); setSources(d.sources||[]); setStatus("done");
+    } catch(e) { setError(e.message||"Ошибка"); setStatus("error"); }
+  };
+
+  return (
+    <div style={{ marginTop:24, paddingTop:20, borderTop:"1px solid rgba(255,255,255,0.07)" }}>
+      <div style={{ color:"#475569", fontSize:11, letterSpacing:0.8, textTransform:"uppercase", marginBottom:12 }}>
+        🤖 Спросить ИИ об этом проекте
+      </div>
+      <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+        <input value={query} onChange={e=>setQuery(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&run()}
+          placeholder="Задай вопрос о проекте..." style={{
+            flex:1, background:"rgba(255,255,255,0.05)",
+            border:"1px solid rgba(255,255,255,0.1)", borderRadius:9,
+            padding:"8px 12px", color:"#e2e8f0", fontSize:12, outline:"none",
+          }} />
+        <button onClick={run} disabled={status==="loading"||!query.trim()} style={{
+          padding:"8px 18px", borderRadius:9, border:"none",
+          background:status==="loading"?"#1e3a5f":"linear-gradient(135deg,#4f8ef7,#6ee7b7)",
+          color:status==="loading"?"#475569":"#060b18",
+          fontWeight:700, fontSize:12, cursor:status==="loading"?"wait":"pointer", whiteSpace:"nowrap",
+        }}>{status==="loading"?"…":"Спросить →"}</button>
+      </div>
+      {error && <div style={{ color:"#fda4af", fontSize:12, padding:"8px 12px",
+        background:"rgba(244,114,182,0.08)", borderRadius:8, marginBottom:10 }}>⚠️ {error}</div>}
+      {answer && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ color:"#94a3b8", fontSize:12, lineHeight:1.75,
+            background:"rgba(255,255,255,0.02)", borderRadius:10, padding:"12px 14px",
+            borderLeft:"3px solid rgba(79,142,247,0.4)", whiteSpace:"pre-wrap" }}>{answer}</div>
+          {sources.length > 0 && (
+            <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
+              {sources.slice(0,3).map((s,i)=>(
+                <div key={i} style={{ fontSize:10, color:"#64748b",
+                  background:"rgba(79,142,247,0.08)", borderRadius:6,
+                  padding:"4px 8px", border:"1px solid rgba(79,142,247,0.15)" }}>
+                  {(s.name||s.registration_number||"").slice(0,40)} · {s.similarity}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Project Modal ──────────────────────────────────────
 function ProjectModal({ project, onClose }) {
+  useEffect(() => {
+    document.body.style.overflow = project ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [project]);
   if (!project) return null;
   return (
     <div
@@ -70,14 +148,12 @@ function ProjectModal({ project, onClose }) {
           borderRadius: 18, padding: "32px 36px", maxWidth: 720, width: "100%",
           maxHeight: "85vh", overflowY: "auto", position: "relative",
         }}>
-        {/* Close */}
         <button onClick={onClose} style={{
           position: "absolute", top: 16, right: 20,
           background: "none", border: "none", color: "#475569",
           fontSize: 22, cursor: "pointer", lineHeight: 1,
         }}>×</button>
 
-        {/* Reg number + link */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
           <span style={{ color: "#334155", fontSize: 11, fontFamily: "monospace" }}>
             {project.registration_number}
@@ -94,14 +170,12 @@ function ProjectModal({ project, onClose }) {
           </a>
         </div>
 
-        {/* Title */}
         <div style={{ color: "#f1f5f9", fontSize: 17, fontWeight: 600, lineHeight: 1.45, marginBottom: 16 }}>
           {project.name || "Название не указано"}
         </div>
 
-        {/* Meta grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginBottom: 18 }}>
-          <MetaRow label="Организация"  value={project.institution ? shortName(project.institution, 60) : "—"} />
+          <MetaRow label="Организация"  value={project.institution ? shortName(project.institution, 200) : "—"} />
           <MetaRow label="Руководитель" value={project.supervisor_full_name || "не указан"} />
           <MetaRow label="Год начала"   value={project.year || "—"} />
           <MetaRow label="Бюджет"       value={fmtBudget(project.budget_total_thousands)} accent="#f59e42" />
@@ -113,7 +187,6 @@ function ProjectModal({ project, onClose }) {
           {project.reports_number && <MetaRow label="Отчётов" value={project.reports_number} />}
         </div>
 
-        {/* Annotation */}
         {project.annotation && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ color: "#475569", fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 6 }}>
@@ -129,15 +202,15 @@ function ProjectModal({ project, onClose }) {
           </div>
         )}
 
-        {/* Keywords */}
         {project.keyword_list && (
-          <div>
+          <div style={{ marginBottom:20 }}>
             <div style={{ color: "#475569", fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 6 }}>
               Ключевые слова
             </div>
             <Tags keywords={project.keyword_list} max={20} />
           </div>
         )}
+        <ModalAgent project={project} />
       </div>
     </div>
   );
@@ -184,7 +257,7 @@ function FilterBar({ draft, onChange, onApply, loading, applied }) {
         </Field>
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onApply} disabled={loading} style={{
+          <button onClick={() => onApply()} disabled={loading} style={{
             padding: "9px 28px", borderRadius: 9, border: "none",
             background: loading ? "#1e3a5f" : "linear-gradient(135deg,#4f8ef7,#6ee7b7)",
             color: loading ? "#475569" : "#060b18",
@@ -263,6 +336,40 @@ function PageBtn({ label, disabled, onClick }) {
   );
 }
 
+// ── Tab Button ─────────────────────────────────────────
+function TabBtn({ id, label, active, onClick, count }) {
+  const isActive = active === id;
+  return (
+    <button
+      onClick={() => onClick(id)}
+      style={{
+        padding: "10px 22px",
+        borderRadius: "10px 10px 0 0",
+        border: "none",
+        borderBottom: isActive ? "2px solid #4f8ef7" : "2px solid transparent",
+        background: isActive ? "rgba(79,142,247,0.1)" : "transparent",
+        color: isActive ? "#e2e8f0" : "#475569",
+        fontWeight: isActive ? 700 : 400,
+        cursor: "pointer",
+        fontSize: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 7,
+        transition: "all 0.15s",
+      }}
+    >
+      {label}
+      {count !== undefined && (
+        <span style={{
+          background: isActive ? "#4f8ef7" : "rgba(255,255,255,0.08)",
+          color: isActive ? "#fff" : "#475569",
+          borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 700,
+        }}>{count}</span>
+      )}
+    </button>
+  );
+}
+
 const sel = {
   background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 9, padding: "8px 14px", color: "#e2e8f0", fontSize: 13, outline: "none",
@@ -283,7 +390,8 @@ export default function App() {
   const [total,    setTotal]    = useState(0);
   const [page,     setPage]     = useState(1);
   const [loading,  setLoading]  = useState(false);
-  const [selected, setSelected] = useState(null);  // for modal
+  const [selected, setSelected] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const [draft,   setDraft]   = useState({ year: "", type: "", search: "" });
   const [applied, setApplied] = useState({ year: "", type: "", search: "" });
@@ -296,7 +404,8 @@ export default function App() {
     setLoading(true);
     fetch(`${API}/api/stats?${p}`)
       .then(r => r.json())
-      .then(d => { setStats(d); setLoading(false); });
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   const fetchProjects = useCallback((f, pg = 1) => {
@@ -306,7 +415,8 @@ export default function App() {
     if (f.search) p.append("search",       f.search);
     fetch(`${API}/api/projects?${p}`)
       .then(r => r.json())
-      .then(d => { setProjects(d.results || []); setTotal(d.total || 0); });
+      .then(d => { setProjects(d.results || []); setTotal(d.total || 0); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -330,7 +440,6 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#060b18", color: "#e2e8f0", fontFamily: "'IBM Plex Sans', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
 
-      {/* Modal */}
       <ProjectModal project={selected} onClose={() => setSelected(null)} />
 
       {/* Header */}
@@ -354,188 +463,209 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{ padding: "32px 48px" }}>
+      <div style={{ padding: "0 48px" }}>
 
-        <FilterBar draft={draft} onChange={setDraft} onApply={handleApply} loading={loading} applied={applied} />
+        {/* ── Tab Navigation ── */}
+        <div style={{
+          display: "flex",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          marginBottom: 28,
+          marginTop: 24,
+          gap: 4,
+        }}>
+          <TabBtn id="overview"   label="📊 Обзор"     active={activeTab} onClick={setActiveTab} count={stats ? stats.total_projects?.toLocaleString("ru") : undefined} />
+          <TabBtn id="analytics"  label="🗺 Аналитика" active={activeTab} onClick={setActiveTab} />
+        </div>
 
-        {/* Stat cards */}
-        {stats && (
-          <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
-            <StatCard icon="📋" label="Проектов"     value={stats.total_projects?.toLocaleString("ru")}          accent="#4f8ef7" />
-            <StatCard icon="🏛"  label="Организаций" value={stats.total_institutions?.toLocaleString("ru")}      accent="#6ee7b7" />
-            <StatCard icon="💰" label="Бюджет"        value={`${stats.total_budget_billions?.toLocaleString("ru")} млрд ₽`} accent="#f59e42" />
-            <StatCard icon="📅" label="Период"        value="2020 – 2025"                                        accent="#a78bfa" />
-          </div>
-        )}
+        {/* ══════════════════════════════════════════
+            TAB: OVERVIEW
+        ══════════════════════════════════════════ */}
+        {activeTab === "overview" && (
+          <>
+            <FilterBar draft={draft} onChange={setDraft} onApply={handleApply} loading={loading} applied={applied} />
 
-        {/* Charts */}
-        {stats && (
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 18, marginBottom: 18 }}>
-            <div style={box}>
-              <SectionTitle>Проекты по годам{applied.search ? ` · «${applied.search}»` : ""}</SectionTitle>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={stats.by_year} barSize={34} margin={{ left: -10 }}>
-                  <XAxis dataKey="year" tick={{ fill: "#475569", fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#475569", fontSize: 11 }} axisLine={false} tickLine={false} width={52} />
-                  <Tooltip contentStyle={tip} cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                    formatter={v => [v.toLocaleString("ru"), "Проектов"]} />
-                  <Bar dataKey="count" radius={[5,5,0,0]}>
-                    {stats.by_year.map((row, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]}
-                        opacity={applied.year && String(row.year) !== applied.year ? 0.25 : 1} />
+            {/* Stat cards */}
+            {stats && (
+              <div style={{ display: "flex", gap: 14, marginBottom: 22, flexWrap: "wrap" }}>
+                <StatCard icon="📋" label="Проектов"     value={stats.total_projects?.toLocaleString("ru")}          accent="#4f8ef7" />
+                <StatCard icon="🏛"  label="Организаций" value={stats.total_institutions?.toLocaleString("ru")}      accent="#6ee7b7" />
+                <StatCard icon="💰" label="Бюджет"        value={`${stats.total_budget_billions?.toLocaleString("ru")} млрд ₽`} accent="#f59e42" />
+                <StatCard icon="📅" label="Период"        value="2020 – 2025"                                        accent="#a78bfa" />
+              </div>
+            )}
+
+            {/* Charts */}
+            {stats && (
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 18, marginBottom: 18 }}>
+                <div style={box}>
+                  <SectionTitle>Проекты по годам{applied.search ? ` · «${applied.search}»` : ""}</SectionTitle>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={stats.by_year} barSize={34} margin={{ left: -10 }}>
+                      <XAxis dataKey="year" tick={{ fill: "#475569", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: "#475569", fontSize: 11 }} axisLine={false} tickLine={false} width={52} />
+                      <Tooltip contentStyle={tip} cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                        formatter={v => [v.toLocaleString("ru"), "Проектов"]} />
+                      <Bar dataKey="count" radius={[5,5,0,0]}>
+                        {stats.by_year.map((row, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]}
+                            opacity={applied.year && String(row.year) !== applied.year ? 0.25 : 1} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={box}>
+                  <SectionTitle>Типы исследований</SectionTitle>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={stats.by_type} dataKey="count" nameKey="type"
+                        cx="50%" cy="50%" outerRadius={80} innerRadius={46} paddingAngle={3}>
+                        {stats.by_type?.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={tip} formatter={(v, n) => [v.toLocaleString("ru"), n?.slice(0,28)]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 8 }}>
+                    {stats.by_type?.map((t, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS[i], flexShrink: 0 }} />
+                        <span style={{ color: "#475569", fontSize: 10 }}>{t.type?.slice(0, 22)}</span>
+                      </div>
                     ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={box}>
-              <SectionTitle>Типы исследований</SectionTitle>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie data={stats.by_type} dataKey="count" nameKey="type"
-                    cx="50%" cy="50%" outerRadius={80} innerRadius={46} paddingAngle={3}>
-                    {stats.by_type?.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={tip} formatter={(v, n) => [v.toLocaleString("ru"), n?.slice(0,28)]} />
-                </PieChart>
-              </ResponsiveContainer>
-              {/* Custom legend below chart */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 8 }}>
-                {stats.by_type?.map((t, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: COLORS[i], flexShrink: 0 }} />
-                    <span style={{ color: "#475569", fontSize: 10 }}>{t.type?.slice(0, 22)}</span>
                   </div>
-                ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top institutions */}
+            {stats && (
+              <div style={{ ...box, marginBottom: 18 }}>
+                <SectionTitle>Топ 10 организаций по числу проектов</SectionTitle>
+                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                  {stats.top_institutions?.map((inst, i) => {
+                    const max = stats.top_institutions[0]?.projects || 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ color: "#1e3a5f", fontSize: 11, fontFamily: "monospace", width: 18, textAlign: "right" }}>{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                            <span style={{ color: "#94a3b8", fontSize: 12 }}>{shortName(inst.name, 64)}</span>
+                            <span style={{ color: COLORS[i % COLORS.length], fontSize: 12, fontFamily: "monospace", marginLeft: 10 }}>
+                              {inst.projects.toLocaleString("ru")}
+                            </span>
+                          </div>
+                          <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2 }}>
+                            <div style={{ height: 4, borderRadius: 2, background: COLORS[i % COLORS.length], width: `${(inst.projects / max) * 100}%`, transition: "width 0.8s ease" }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Projects table */}
+            <div style={box}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16 }}>
+                <SectionTitle>Проекты</SectionTitle>
+                <span style={{ color: "#334155", fontSize: 13, marginTop: -14 }}>
+                  {total.toLocaleString("ru")} результатов
+                </span>
+                <span style={{ color: "#1e3a5f", fontSize: 11, marginTop: -14 }}>· нажмите на строку для подробностей</span>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {["Рег №","Название / Ключевые слова","Организация","Год","Тип НИР","Бюджет","Руководитель"].map(h => (
+                        <th key={h} style={{
+                          padding: "9px 12px", textAlign: "left",
+                          color: "#334155", fontSize: 10, fontWeight: 600,
+                          letterSpacing: 0.7, textTransform: "uppercase",
+                          borderBottom: "1px solid rgba(255,255,255,0.06)",
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects.map((p, i) => (
+                      <tr key={i}
+                        onClick={() => setSelected(p)}
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", verticalAlign: "top", cursor: "pointer" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(79,142,247,0.06)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <td style={{ padding: "11px 12px", color: "#334155", fontSize: 10, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {p.registration_number}
+                        </td>
+                        <td style={{ padding: "11px 12px", maxWidth: 300 }}>
+                          <div style={{ color: "#cbd5e1", fontSize: 12, lineHeight: 1.4 }}>{p.name || "—"}</div>
+                          <Tags keywords={p.keyword_list} max={4} />
+                        </td>
+                        <td style={{ padding: "11px 12px", color: "#64748b", fontSize: 11, maxWidth: 180 }}>
+                          {p.institution ? shortName(p.institution, 40) : "—"}
+                        </td>
+                        <td style={{ padding: "11px 12px", color: "#4f8ef7", fontSize: 13, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {p.year || "—"}
+                        </td>
+                        <td style={{ padding: "11px 12px", maxWidth: 120 }}>
+                          {p.nioktr_types ? (
+                            <span style={{
+                              background: "rgba(110,231,183,0.1)", border: "1px solid rgba(110,231,183,0.2)",
+                              borderRadius: 5, padding: "2px 7px", fontSize: 10, color: "#6ee7b7",
+                            }}>{p.nioktr_types.slice(0,18)}</span>
+                          ) : "—"}
+                        </td>
+                        <td style={{ padding: "11px 12px", color: "#f59e42", fontSize: 12, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {fmtBudget(p.budget_total_thousands)}
+                        </td>
+                        <td style={{ padding: "11px 12px", color: "#64748b", fontSize: 11 }}>
+                          {p.supervisor_full_name || <span style={{ color: "#1e3a5f" }}>н/д</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, justifyContent: "center" }}>
+                <PageBtn label="← Пред" disabled={page === 1} onClick={() => goPage(page - 1)} />
+                {[...Array(Math.min(7, pages))].map((_, i) => {
+                  const pg = Math.max(1, Math.min(page - 3, pages - 6)) + i;
+                  if (pg < 1 || pg > pages) return null;
+                  return (
+                    <button key={pg} onClick={() => goPage(pg)} style={{
+                      width: 34, height: 34, borderRadius: 7, border: "none",
+                      background: page === pg ? "#4f8ef7" : "rgba(255,255,255,0.05)",
+                      color: page === pg ? "#fff" : "#475569",
+                      cursor: "pointer", fontSize: 12, fontWeight: page === pg ? 700 : 400,
+                    }}>{pg}</button>
+                  );
+                })}
+                <PageBtn label="След →" disabled={page >= pages} onClick={() => goPage(page + 1)} />
               </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Top institutions */}
-        {stats && (
-          <div style={{ ...box, marginBottom: 18 }}>
-            <SectionTitle>Топ 10 организаций по числу проектов</SectionTitle>
-            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {stats.top_institutions?.map((inst, i) => {
-                const max = stats.top_institutions[0]?.projects || 1;
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ color: "#1e3a5f", fontSize: 11, fontFamily: "monospace", width: 18, textAlign: "right" }}>{i + 1}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>{shortName(inst.name, 64)}</span>
-                        <span style={{ color: COLORS[i % COLORS.length], fontSize: 12, fontFamily: "monospace", marginLeft: 10 }}>
-                          {inst.projects.toLocaleString("ru")}
-                        </span>
-                      </div>
-                      <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2 }}>
-                        <div style={{ height: 4, borderRadius: 2, background: COLORS[i % COLORS.length], width: `${(inst.projects / max) * 100}%`, transition: "width 0.8s ease" }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* ══════════════════════════════════════════
+            TAB: ANALYTICS (Graph + Map)
+        ══════════════════════════════════════════ */}
+        {activeTab === "analytics" && (
+          <div style={{ paddingBottom: 40 }}>
+            <div style={{ color: "#475569", fontSize: 12, marginBottom: 20 }}>
+              Графы связей между организациями и тематиками, а также географическое распределение проектов по регионам России.
             </div>
+            <GraphPanel />
+            <TrendsPanel />
+            <RegionMap />
           </div>
         )}
 
-        {/* Map placeholder */}
-        <div style={{
-          ...box, marginBottom: 18, height: 150,
-          display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8,
-          background: "repeating-linear-gradient(45deg,rgba(79,142,247,0.02) 0px,rgba(79,142,247,0.02) 1px,transparent 1px,transparent 10px)",
-          border: "1px dashed rgba(79,142,247,0.15)",
-        }}>
-          <span style={{ fontSize: 30 }}>🗺</span>
-          <div style={{ color: "#334155", fontSize: 13, fontWeight: 600 }}>Интерактивная карта России — Deck.gl (в разработке)</div>
-          <div style={{ color: "#1e3a5f", fontSize: 11 }}>{stats?.total_institutions?.toLocaleString("ru")} организаций · пузыри по бюджету</div>
-        </div>
-
-        {/* Projects table */}
-        <div style={box}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16 }}>
-            <SectionTitle>Проекты</SectionTitle>
-            <span style={{ color: "#334155", fontSize: 13, marginTop: -14 }}>
-              {total.toLocaleString("ru")} результатов
-            </span>
-            <span style={{ color: "#1e3a5f", fontSize: 11, marginTop: -14 }}>· нажмите на строку для подробностей</span>
-          </div>
-
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {["Рег №","Название / Ключевые слова","Организация","Год","Тип НИР","Бюджет","Руководитель"].map(h => (
-                    <th key={h} style={{
-                      padding: "9px 12px", textAlign: "left",
-                      color: "#334155", fontSize: 10, fontWeight: 600,
-                      letterSpacing: 0.7, textTransform: "uppercase",
-                      borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p, i) => (
-                  <tr key={i}
-                    onClick={() => setSelected(p)}
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", verticalAlign: "top", cursor: "pointer" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(79,142,247,0.06)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <td style={{ padding: "11px 12px", color: "#334155", fontSize: 10, fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                      {p.registration_number}
-                    </td>
-                    <td style={{ padding: "11px 12px", maxWidth: 300 }}>
-                      <div style={{ color: "#cbd5e1", fontSize: 12, lineHeight: 1.4 }}>{p.name || "—"}</div>
-                      <Tags keywords={p.keyword_list} max={4} />
-                    </td>
-                    <td style={{ padding: "11px 12px", color: "#64748b", fontSize: 11, maxWidth: 180 }}>
-                      {p.institution ? shortName(p.institution, 40) : "—"}
-                    </td>
-                    <td style={{ padding: "11px 12px", color: "#4f8ef7", fontSize: 13, fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                      {p.year || "—"}
-                    </td>
-                    <td style={{ padding: "11px 12px", maxWidth: 120 }}>
-                      {p.nioktr_types ? (
-                        <span style={{
-                          background: "rgba(110,231,183,0.1)", border: "1px solid rgba(110,231,183,0.2)",
-                          borderRadius: 5, padding: "2px 7px", fontSize: 10, color: "#6ee7b7",
-                        }}>{p.nioktr_types.slice(0,18)}</span>
-                      ) : "—"}
-                    </td>
-                    <td style={{ padding: "11px 12px", color: "#f59e42", fontSize: 12, fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                      {fmtBudget(p.budget_total_thousands)}
-                    </td>
-                    <td style={{ padding: "11px 12px", color: "#64748b", fontSize: 11 }}>
-                      {p.supervisor_full_name || <span style={{ color: "#1e3a5f" }}>н/д</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, justifyContent: "center" }}>
-            <PageBtn label="← Пред" disabled={page === 1} onClick={() => goPage(page - 1)} />
-            {[...Array(Math.min(7, pages))].map((_, i) => {
-              const pg = Math.max(1, Math.min(page - 3, pages - 6)) + i;
-              if (pg < 1 || pg > pages) return null;
-              return (
-                <button key={pg} onClick={() => goPage(pg)} style={{
-                  width: 34, height: 34, borderRadius: 7, border: "none",
-                  background: page === pg ? "#4f8ef7" : "rgba(255,255,255,0.05)",
-                  color: page === pg ? "#fff" : "#475569",
-                  cursor: "pointer", fontSize: 12, fontWeight: page === pg ? 700 : 400,
-                }}>{pg}</button>
-              );
-            })}
-            <PageBtn label="След →" disabled={page >= pages} onClick={() => goPage(page + 1)} />
-          </div>
-        </div>
-
+        <div style={{ height: 40 }} />
       </div>
     </div>
   );

@@ -6,47 +6,106 @@ A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](h
 
 ---
 
-## Quick Start
+# Science Aggregator
+
+A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](https://gisnauka.ru), covering 2020–2025.
+
+**104,466 projects · 7,752 institutions**  
+**With AI-powered RAG agent + relationship graphs**
+
+---
+
+## Quick Start (Docker Only)
 
 ### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Python 3.10+
+- No npm, Python, or other installations needed! ✅
 
-### 1. Clone the repository
+### 1. Clone & Enter
 
 ```bash
 git clone https://github.com/Data-Wrangling-and-Visualisation-2026/Science-aggregator
 cd Science-aggregator
 ```
 
-### 2. Set up environment variables
+### 2. Download Dataset (Manual step, one-time)
+
+1. Open: https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/view?usp=sharing
+2. Click "Download"
+3. Extract to: `data/processed/clean_all_years.parquet`
+
+### 3. Run These 4 Commands
 
 ```bash
-cp .env.example .env
+# [1] Start database + Ollama
+docker compose up -d db ollama
+
+# [2] Wait ~60 seconds for health checks
+sleep 60
+
+# [3] Seed database (load 104k projects)
+docker compose run --rm seeder
+
+# [4] Generate embeddings (takes ~15 min, let it run)
+docker compose run --rm embedder
+
+# [5] Start everything
+docker compose up -d
 ```
 
-Open `.env` and set your values:
+### 4. Open Dashboard
 
 ```
-POSTGRES_DB=science
-POSTGRES_USER=user
-POSTGRES_PASSWORD=password
-DATABASE_URL_LOCAL=postgresql://user:password@localhost:5432/science
-DATABASE_URL=postgresql://user:password@db:5432/science
+http://localhost:5173
 ```
 
-### 3. Download the processed dataset
+✅ You should see:
+- Dashboard with statistics
+- Graph visualization (institutions & topics)
+- Projects table
+- Click any project → AI agent panel appears
 
-Download the file and place it at `data/processed/clean_all_years.parquet`:
+---
 
-> 📦 **[Download clean_all_years.parquet](https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/view?usp=sharing)** (~180 MB)
+## Architecture
 
-### 4. Seed the database
+```
+🖥️ Your Browser (http://localhost:5173)
+    ↓
+🚀 Frontend (Node.js in Docker)
+    ↓
+📡 Backend API (FastAPI in Docker, port 8000)
+    ↓
+🤖 Ollama LLM (Local AI, port 11434)
+    ↓
+🗄️ PostgreSQL + pgvector (Database)
+```
+
+**All services containerized. No local installations needed.**
+
+---
+
+## Documentation
+
+- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)** — Complete step-by-step guide
+- **[QUICK_COMMANDS.txt](QUICK_COMMANDS.txt)** — Copy-paste command reference  
+- **[VISUAL_DEPLOYMENT_GUIDE.md](VISUAL_DEPLOYMENT_GUIDE.md)** — Verify each step
+- **[CONTAINERIZATION_SUMMARY.md](CONTAINERIZATION_SUMMARY.md)** — For instructors/team
+
+---
+
+## Common Commands
 
 ```bash
-pip install pandas pyarrow sqlalchemy psycopg2-binary python-dotenv
-docker compose up -d db
-python backend/seed_db.py
+docker compose up -d          # Start all services
+docker compose down           # Stop all services
+docker compose logs -f        # View all logs
+docker compose ps             # Show running services
+
+# Testing
+curl http://localhost:8000/health
+curl http://localhost:8000/api/stats
+curl "http://localhost:8000/api/agent?q=machine%20learning"
 ```
 
 This loads 104,466 records into PostgreSQL (~2 min).

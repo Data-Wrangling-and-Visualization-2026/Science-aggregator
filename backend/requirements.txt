@@ -5,3 +5,10 @@ psycopg2-binary==2.9.9
 pandas==2.2.2
 pyarrow==17.0.0
 python-dotenv==1.0.1
+httpx==0.27.0
+pgvector==0.3.2
+# fastembed вместо sentence-transformers:
+# - не тянет torch/CUDA (~100MB вместо ~2GB)
+# - те же модели через ONNX Runtime
+# - подходит для CPU, работает быстрее
+fastembed==0.3.6

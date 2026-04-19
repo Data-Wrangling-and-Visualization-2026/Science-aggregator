@@ -1,6 +1,7 @@
 services:
+
   db:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: science_db
     env_file: .env
     environment:
@@ -15,19 +16,55 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+  seeder:
+    build: ./backend
+    container_name: science_seeder
+    environment:
+      DATABASE_URL_LOCAL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    env_file: .env
+    volumes:
+      - ./data:/data
+    command: python seed_db.py
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  embedder:
+    build: ./backend
+    container_name: science_embedder
+    environment:
+      # DATABASE_URL_LOCAL используется в embed.py для подключения к базе
+      DATABASE_URL_LOCAL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    env_file: .env
+    volumes:
+      - ./data:/data
+    command: python embed.py
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   backend:
     build: ./backend
     container_name: science_backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     env_file: .env
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      # ИСПРАВЛЕНО: убрали зависимость от ollama health.
+      # Бэкенд умеет возвращать 503 если ollama недоступна — это нормально.
+      # Раньше из-за падения healthcheck ollama бэкенд вообще не стартовал.
+      ollama:
+        condition: service_started
 
   frontend:
     image: node:20-alpine
@@ -41,5 +78,22 @@ services:
     depends_on:
       - backend
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: science_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      # ИСПРАВЛЕНО: curl нет в образе ollama/ollama:latest.
+      # Используем встроенную команду ollama list которая есть всегда.
+      test: ["CMD-SHELL", "ollama list > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
 volumes:
   pgdata:
+  ollama_data:
