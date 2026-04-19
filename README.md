@@ -1,127 +1,72 @@
 # Science Aggregator
 
-A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](https://gisnauka.ru), covering 2020–2025.
+An interactive web dashboard for exploring Russian R&D projects (NIOKTR) sourced from [gisnauka.ru](https://gisnauka.ru), covering 2020–2025.
 
-**104,466 projects · 7,752 institutions**
-
----
-
-# Science Aggregator
-
-A web dashboard for exploring Russian R&D projects (NIOKTR) from [gisnauka.ru](https://gisnauka.ru), covering 2020–2025.
-
-**104,466 projects · 7,752 institutions**  
-**With AI-powered RAG agent + relationship graphs**
+**104,466 projects · 7,752 institutions · 6 Docker services**
 
 ---
 
-## Quick Start (Docker Only)
+## What It Does
 
-### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- No npm, Python, or other installations needed! ✅
+| Feature | Description |
+|---------|-------------|
+| **Overview** | Filter by year, R&D type, full-text search with OR logic across name, annotation, and keywords |
+| **Relationship Graph** | Force-directed graph of institutions or keyword topics — nodes are draggable |
+| **Science Map** | Bubble map of cities using real Russia boundaries (world-atlas TopoJSON) |
+| **Trends 2020–2025** | Bump chart of keyword rank changes + streamgraph of budget flow, with year-by-year animation |
+| **RAG Agent** | Ask any question about a project — Llama 3.2 answers using semantically retrieved context via pgvector |
 
-### 1. Clone & Enter
+---
+
+## Quick Start
+
+### Requirements
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — nothing else needed
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/Data-Wrangling-and-Visualisation-2026/Science-aggregator
 cd Science-aggregator
 ```
 
-### 2. Download Dataset (Manual step, one-time)
+### 2. Download the Dataset
 
-1. Open: https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/view?usp=sharing
-2. Click "Download"
-3. Extract to: `data/processed/clean_all_years.parquet`
+The dataset is not stored in the repository (1.2 GB parquet file):
 
-### 3. Run These 4 Commands
+1. Open: [clean_all_years.parquet on Google Drive](https://drive.google.com/file/d/1OCCkSEJzn8w9xLHF0qSuVm3UtOVFOgbY/)
+2. Download and place at: `data/processed/clean_all_years.parquet`
+
+### 3. Configure Environment
 
 ```bash
-# [1] Start database + Ollama
+cp .env.example .env
+# Edit .env if you want to change DB credentials (defaults work fine)
+```
+
+### 4. Run
+
+```bash
+# Step 1 — Start the database and Ollama
 docker compose up -d db ollama
 
-# [2] Wait ~60 seconds for health checks
-sleep 60
-
-# [3] Seed database (load 104k projects)
+# Step 2 — Wait ~30 seconds for health checks, then seed the database
 docker compose run --rm seeder
 
-# [4] Generate embeddings (takes ~15 min, let it run)
+# Step 3 — Generate vector embeddings (~15 min, runs in background)
 docker compose run --rm embedder
 
-# [5] Start everything
+# Step 4 — Download the language model (~2 GB, one-time)
+bash pull_model.sh
+
+# Step 5 — Start everything
 docker compose up -d
 ```
 
-### 4. Open Dashboard
+Open **http://localhost:5173**
 
-```
-http://localhost:5173
-```
-
-✅ You should see:
-- Dashboard with statistics
-- Graph visualization (institutions & topics)
-- Projects table
-- Click any project → AI agent panel appears
-
----
-
-## Architecture
-
-```
-🖥️ Your Browser (http://localhost:5173)
-    ↓
-🚀 Frontend (Node.js in Docker)
-    ↓
-📡 Backend API (FastAPI in Docker, port 8000)
-    ↓
-🤖 Ollama LLM (Local AI, port 11434)
-    ↓
-🗄️ PostgreSQL + pgvector (Database)
-```
-
-**All services containerized. No local installations needed.**
-
----
-
-## Documentation
-
-- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)** — Complete step-by-step guide
-- **[QUICK_COMMANDS.txt](QUICK_COMMANDS.txt)** — Copy-paste command reference  
-- **[VISUAL_DEPLOYMENT_GUIDE.md](VISUAL_DEPLOYMENT_GUIDE.md)** — Verify each step
-- **[CONTAINERIZATION_SUMMARY.md](CONTAINERIZATION_SUMMARY.md)** — For instructors/team
-
----
-
-## Common Commands
-
-```bash
-docker compose up -d          # Start all services
-docker compose down           # Stop all services
-docker compose logs -f        # View all logs
-docker compose ps             # Show running services
-
-# Testing
-curl http://localhost:8000/health
-curl http://localhost:8000/api/stats
-curl "http://localhost:8000/api/agent?q=machine%20learning"
-```
-
-This loads 104,466 records into PostgreSQL (~2 min).
-
-### 5. Start all services
-
-```bash
-docker compose up -d
-```
-
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-
-### 6. Verify the backend
+### Verify
 
 ```bash
 curl http://localhost:8000/health
@@ -133,59 +78,67 @@ curl http://localhost:8000/api/stats
 
 ---
 
-## Project Structure
+## Architecture
 
 ```
-Science-aggregator/
-├── backend/
-│   ├── main.py              # FastAPI — /api/stats, /api/projects, /api/map-data
-│   ├── seed_db.py           # Loads parquet → PostgreSQL
-│   ├── Dockerfile
-│   └── requirements.txt
-├── data/
-│   ├── raw/                 # Raw JSON from gisnauka.ru (not in git)
-│   └── processed/           # Cleaned parquet (not in git — too large)
-├── docs/                    # Project documentation and proposals
-├── frontend/
-│   ├── public/
-│   └── src/
-│       ├── App.jsx          # Main React dashboard component
-│       ├── main.jsx
-│       ├── App.css
-│       └── index.css
-├── scripts/
-│   └── process_data.py      # Raw JSON → cleaned Parquet pipeline
-├── docker-compose.yml
-├── .env.example
-└── README.md
+Browser
+  └── React 18 + Vite          (port 5173)
+        └── FastAPI + SQLAlchemy  (port 8000)
+              ├── PostgreSQL 16 + pgvector  (port 5432)
+              └── Ollama / Llama 3.2        (port 11434)
 ```
+
+### Docker Services
+
+| Service | Image | Purpose |
+|---------|-------|---------|
+| `db` | `pgvector/pgvector:pg16` | Project storage + vector embeddings |
+| `seeder` | `./backend` | Loads parquet → PostgreSQL (runs once) |
+| `embedder` | `./backend` | Generates embeddings via fastembed (runs once) |
+| `backend` | `./backend` | FastAPI REST API |
+| `frontend` | `node:20-alpine` | React dev server |
+| `ollama` | `ollama/ollama` | Local LLM inference |
 
 ---
 
-## API Endpoints
+## API Reference
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /api/stats` | Aggregate statistics (filters: `year`, `nioktr_type`, `search`) |
-| `GET /api/projects` | Paginated project list (filters + `page`, `limit`) |
-| `GET /api/map-data` | Institution-level aggregates for map visualization |
-
-**Search supports comma-separated terms** — `нейросети, климат` finds projects mentioning either term.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/api/stats` | Aggregated statistics (filters: `year`, `nioktr_type`, `search`) |
+| `GET` | `/api/projects` | Paginated project list |
+| `GET` | `/api/projects/{reg}` | Single project card |
+| `GET` | `/api/budget/stats` | Budget analytics by year, type, and institution |
+| `GET` | `/api/trends` | Keyword trend data for bump chart (2020–2025) |
+| `GET` | `/api/graph` | Relationship graph (`mode=topics\|institutions`) |
+| `GET` | `/api/map-data` | City-level aggregates for the bubble map |
+| `GET` | `/api/search/semantic` | Semantic search via pgvector cosine similarity |
+| `GET` | `/api/agent` | RAG agent — Ollama + pgvector retrieval |
 
 ---
 
 ## Data Pipeline
 
-Raw data was downloaded from [gisnauka.ru](https://gisnauka.ru) as JSON exports (2020–2025).
+```
+gisnauka.ru  →  raw JSON (2020–2025)
+                    ↓  scripts/process_data.py
+             clean_all_years.parquet
+             104,466 records · 34 columns
+                    ↓  backend/seed_db.py
+             PostgreSQL: table projects
+                    ↓  backend/embed.py
+             PostgreSQL: table project_embeddings
+             vector(384) — paraphrase-multilingual-MiniLM-L12-v2
+```
 
-Processing steps in `scripts/process_data.py`:
-1. Load and concatenate JSON files (~112,000 records)
-2. Deduplicate by `registration_number`
-3. Normalize budget fields and parse date columns
-4. Export to `data/processed/clean_all_years.parquet`
+Key data quality notes:
+- Deduplicated by `registration_number` (keep last)
+- Budget stored in thousands of RUB
+- ~43% of projects are geo-located (city name present in institution name)
+- One anomalous record with year 1920 retained as-is
 
-Final dataset: **104,466 records, 34 columns**
+See `docs/eda.ipynb` for the full exploratory analysis.
 
 ---
 
@@ -193,16 +146,52 @@ Final dataset: **104,466 records, 34 columns**
 
 | Layer | Technology |
 |-------|-----------|
-| Data processing | Python, pandas, pyarrow |
-| Database | PostgreSQL 16 (Docker) |
+| Data collection | Python, requests |
+| Data processing | pandas, pyarrow |
+| Database | PostgreSQL 16, pgvector extension |
+| Embeddings | fastembed (ONNX, no GPU required) |
+| Embedding model | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, multilingual) |
 | Backend | FastAPI, SQLAlchemy, uvicorn |
+| LLM | Ollama, Llama 3.2:3b (local, no API key needed) |
 | Frontend | React 18, Vite, Recharts |
-| Containerization | Docker, Docker Compose |
+| Infrastructure | Docker, Docker Compose |
+
+---
+
+## Project Structure
+
+```
+Science-aggregator/
+├── backend/
+│   ├── main.py           # FastAPI — all API endpoints
+│   ├── seed_db.py        # Parquet → PostgreSQL loader
+│   ├── embed.py          # Embedding pipeline (fastembed)
+│   ├── Dockerfile
+│   └── requirements.txt
+├── data/
+│   └── processed/        # Not tracked in git (too large)
+├── docs/
+│   └── eda.ipynb         # Exploratory data analysis
+├── frontend/
+│   └── src/
+│       ├── App.jsx        # Main dashboard
+│       ├── GraphPanel.jsx # Force-directed graph
+│       ├── RegionMap.jsx  # Russia bubble map
+│       ├── TrendsPanel.jsx# Bump chart + streamgraph
+│       └── AgentPanel.jsx # RAG agent UI
+├── scripts/
+│   └── process_data.py   # Raw JSON → cleaned parquet
+├── docker-compose.yml
+├── pull_model.sh         # Downloads Llama model into Ollama
+├── .env.example
+└── README.md
+```
 
 ---
 
 ## Team
 
-- **Marat Akhmetov** — data pipeline, backend API
-- **Ekaterina Baeva** — frontend dashboard
+- **Marat Akhmetov** — data pipeline, backend API, pgvector, Docker infrastructure
+- **Ekaterina Baeva** — frontend, visualizations
 
+**Course:** Data Wrangling & Visualization 2026 · Prof. Rustam Lukmanov
